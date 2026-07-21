@@ -1,0 +1,32 @@
+#!/bin/sh
+# tas2781-force-fwload — enable the 'Speaker Force Firmware Load' ALSA
+# control on the TAS2781 HDA side-codec.
+#
+# With this control ON, every PCM open fully re-stages the amplifier DSP
+# program + config + calibration data (force_fwload_status defeats the
+# "Unneeded loading dsp conf" short-circuit in tas2781-fmwlib.c). Without
+# it, the first PCM close leaves the woofer DSP dead on affected machines
+# and every later open skips re-staging — leaving tweeter-only sound.
+#
+# The control only appears once the TAS2781 RCA firmware has finished
+# loading (asynchronously, typically 10–20 s after boot), so poll for it.
+
+CONTROL='Speaker Force Firmware Load'
+TIMEOUT="${TAS2781_FWLOAD_TIMEOUT:-90}"
+
+i=0
+while [ "$i" -lt "$TIMEOUT" ]; do
+    for card in /sys/class/sound/card[0-9]*; do
+        [ -e "$card" ] || continue
+        n="${card##*card}"
+        if amixer -c "$n" cget "iface=CARD,name=$CONTROL" >/dev/null 2>&1; then
+            exec amixer -c "$n" cset "iface=CARD,name=$CONTROL" on
+        fi
+    done
+    sleep 1
+    i=$((i + 1))
+done
+
+echo "tas2781-force-fwload: control '$CONTROL' did not appear within ${TIMEOUT}s" >&2
+echo "tas2781-force-fwload: is this machine using the tas2781-hda driver, and did the TAS2781 firmware load? (dmesg | grep -i tas2781)" >&2
+exit 1

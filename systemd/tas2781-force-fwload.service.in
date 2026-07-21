@@ -1,0 +1,12 @@
+[Unit]
+Description=Force TAS2781 DSP re-staging on every PCM open (woofer fix)
+Documentation=https://github.com/baldvin-kovacs/tas2781-force-fwload
+After=sound.target
+
+[Service]
+Type=oneshot
+ExecStart=@BINDIR@/tas2781-force-fwload
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

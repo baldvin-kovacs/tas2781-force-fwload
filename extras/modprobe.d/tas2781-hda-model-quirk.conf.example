@@ -1,0 +1,16 @@
+# OPTIONAL — only needed on kernels OLDER than 7.1, and only on machines
+# with an SSID collision that makes the generic SOF HDA driver pick the
+# wrong quirk table, so the TAS2781 side-codec never binds at all.
+#
+# Symptom: no 'Speaker Force Firmware Load' control ever appears, no
+# tas2781 messages in dmesg, speakers (all of them) silent or tweeter-only
+# from the very first boot.
+#
+# Known affected machine: Lenovo Yoga Pro 9 16IMH9 (83DN) — the codec
+# subsystem ID is 17aa:38d6 but the PCI subsystem ID is 17aa:3811, and the
+# quirk lookup used the PCI one. Fixed upstream in kernel 7.1.
+#
+# To use: find YOUR codec SSID (grep -i subsystem /proc/asound/card*/codec\#*
+# or check `dmesg | grep -i ssid`), substitute it below, copy this file to
+# /etc/modprobe.d/tas2781-hda-model-quirk.conf, and reboot.
+options snd_sof_intel_hda_generic hda_model=17aa:38d6
