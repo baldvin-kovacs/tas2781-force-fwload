@@ -9,7 +9,7 @@ license=('MIT')
 depends=('alsa-utils' 'systemd')
 install=tas2781-force-fwload.install
 source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
-sha256sums=('SKIP')
+sha256sums=('4863434d77856bfd5dac442e3b3bdbe7bfe9afdfe50dcd5fddad02fdff62857a')
 
 package() {
   cd "$pkgname-$pkgver"
