@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.2.2 — 2026-07-22
+
+Release engineering only, no functional changes.
+
+- Release tags are now GPG-signed.
+- Source tarballs are published as GitHub release assets together with a
+  detached PGP signature; the PKGBUILD verifies them via `validpgpkeys`
+  (key `1C711551878F8E1EC2F47E37F57A7B17F6FFB8C8`, Baldvin Kovacs
+  <baldvin@baldvin.net>, fetchable from keys.openpgp.org).
+- First release published to the AUR as `tas2781-force-fwload`.
+
 ## 0.2.1 — 2026-07-22
 
 - tas2781-win-fw: the pacman hook no longer executes the tool from wherever

@@ -1,6 +1,6 @@
-# Maintainer: Baldvin Kovacs <baldvin.kovacs@gmail.com>
+# Maintainer: Baldvin Kovacs <baldvin@baldvin.net>
 pkgname=tas2781-force-fwload
-pkgver=0.2.1
+pkgver=0.2.2
 pkgrel=1
 pkgdesc="Restore woofer output on laptops with TI TAS2781 smart amps (e.g. Lenovo Yoga Pro 9) by forcing DSP re-staging on every stream"
 arch=('any')
@@ -8,8 +8,12 @@ url="https://github.com/baldvin-kovacs/tas2781-force-fwload"
 license=('MIT')
 depends=('alsa-utils' 'systemd' 'zstd')
 install=tas2781-force-fwload.install
-source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
-sha256sums=('068236fef4c96b3c6973c9f8b1c8beae49392e905c80fd22cf139a9d25409717')
+# Signature is verified against the maintainer key; import it once with:
+#   gpg --keyserver keys.openpgp.org --recv-keys 1C711551878F8E1EC2F47E37F57A7B17F6FFB8C8
+source=("$url/releases/download/v$pkgver/$pkgname-$pkgver.tar.gz"{,.asc})
+sha256sums=('SKIP'
+            'SKIP')
+validpgpkeys=('1C711551878F8E1EC2F47E37F57A7B17F6FFB8C8') # Baldvin Kovacs <baldvin@baldvin.net>
 
 package() {
   cd "$pkgname-$pkgver"
