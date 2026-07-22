@@ -11,7 +11,7 @@ install=tas2781-force-fwload.install
 # Signature is verified against the maintainer key; import it once with:
 #   gpg --keyserver keys.openpgp.org --recv-keys 1C711551878F8E1EC2F47E37F57A7B17F6FFB8C8
 source=("$url/releases/download/v$pkgver/$pkgname-$pkgver.tar.gz"{,.asc})
-sha256sums=('SKIP'
+sha256sums=('01c2260cf87c04a4a0c771c3d84dac5ba6bfccd1a73b1791476e90b86399de64'
             'SKIP')
 validpgpkeys=('1C711551878F8E1EC2F47E37F57A7B17F6FFB8C8') # Baldvin Kovacs <baldvin@baldvin.net>
 
