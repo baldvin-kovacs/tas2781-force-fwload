@@ -2,8 +2,9 @@
 #
 # With runtime PM on "auto", the amps drop into software shutdown after a
 # few seconds of silence and do not reliably come back: on the next stream
-# the driver believes its DSP program/config is still current ("Unneeded
-# loading dsp conf" in dmesg) and does not re-establish the amps. The
+# the driver believes its DSP program/config is still current (the
+# "Unneeded loading dsp conf" debug message) and does not re-establish the
+# amps. The
 # force-fwload workaround is only reliable with the amps pinned on.
 #
 # Tradeoff: the amps stay powered continuously (minor battery cost).

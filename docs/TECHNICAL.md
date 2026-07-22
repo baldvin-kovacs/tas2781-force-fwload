@@ -43,7 +43,10 @@ every later open logs
 tasdevice_select_tuningprm_cfg: Unneeded loading dsp conf 0
 ```
 
-and stages nothing.
+and stages nothing. (That line is a `dev_dbg()` — it only reaches dmesg with
+dynamic debug enabled for `snd_soc_tas2781_fmwlib`, e.g.
+`echo 'func tasdevice_select_tuningprm_cfg +p' > /sys/kernel/debug/dynamic_debug/control`.
+The README's diagnostic section walks users through this.)
 
 ### 2. Stream close kills the DSP that the cache says is loaded
 

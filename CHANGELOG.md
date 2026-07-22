@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.1.1 — 2026-07-22
+
+Documentation fix, no functional changes.
+
+- The "Unneeded loading dsp conf" diagnostic message is a `dev_dbg()` and is
+  invisible without dynamic debug — the 0.1.0 README implied it shows up in
+  dmesg by default, which would falsely rule out affected machines. The
+  "Is this your bug?" section now walks through enabling the callsite via
+  `/sys/kernel/debug/dynamic_debug/control` first.
+
 ## 0.1.0 — 2026-07-21
 
 Initial release.

@@ -34,15 +34,26 @@ Two quick checks:
 
    should list one or more bound i2c devices.
 
-2. The tell-tale log signature — after the first stream, every subsequent
-   playback start logs:
+2. The tell-tale log signature. **The message is debug-level (`dev_dbg`), so
+   it does not appear in dmesg by default** — enable it first (needs
+   `CONFIG_DYNAMIC_DEBUG`, which is on in stock Arch/Debian/Ubuntu/Fedora
+   kernels):
 
    ```
-   dmesg | grep -i "Unneeded loading dsp conf"
+   echo 'func tasdevice_select_tuningprm_cfg +p' | sudo tee /sys/kernel/debug/dynamic_debug/control
    ```
 
-   If you see repeated `tasdevice_select_tuningprm_cfg: Unneeded loading dsp
-   conf 0` lines while your bass is missing, this is your bug.
+   Then play something, stop it, start playback again, and check:
+
+   ```
+   sudo dmesg | grep -i "Unneeded loading dsp conf"
+   ```
+
+   Repeated `tasdevice_select_tuningprm_cfg: Unneeded loading dsp conf 0`
+   lines while your bass is missing confirm the bug. (Turn the logging back
+   off with the same `echo` command, using `-p` instead of `+p`. Note that
+   once this package's fix is active, the line disappears — forced staging
+   makes the "unneeded" branch no longer taken.)
 
 If the driver never binds at all (check 1 lists nothing and there are no
 tas2781 messages in dmesg), see
