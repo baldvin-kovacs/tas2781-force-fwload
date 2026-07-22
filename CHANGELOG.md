@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.2.0 — 2026-07-22
+
+- New optional tool `tas2781-win-fw`: install the TAS2781 DSP firmware from
+  the user's own Windows installation (mounted partition, directory, or
+  extracted file) as a persistent override. Validates the blob header,
+  backs up the stock file, and on Arch writes a pacman PostTransaction hook
+  so the override survives `pacman -Syu` / linux-firmware upgrades.
+  `status` / `reapply` / `revert` subcommands included. The firmware itself
+  is proprietary and is NOT distributed with this project.
+- docs: side finding written up — the Windows driver ships a 10-day-newer
+  revision of the same tuning differing only in five DRC/limiter DSP words
+  (thresholds −5.5/−0.5 dB, steps 1.5→1.0 dB); identical below threshold.
+
 ## 0.1.1 — 2026-07-22
 
 Documentation fix, no functional changes.

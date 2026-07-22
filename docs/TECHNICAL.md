@@ -130,6 +130,31 @@ Open question for upstreaming: whether *all* TAS2781 platforms lose DSP
 memory on PRE_SHUTDOWN (making the cache simply wrong) or only some (making
 this quirk-worthy). The register evidence here covers one platform.
 
+## Side finding: the Windows driver ships a newer tuning revision
+
+Decoding both blobs down to the register-write commands they encode
+(`tasdevice_process_block` format: single/burst writes with book/page/reg
+addressing) shows the Windows `TAS2XXX38D6.bin` on the Yoga Pro 9 16IMH9 is
+a **10-day-newer build of the same tuning** (header timestamps 2023-12-19
+Linux vs 2023-12-29 Windows). Every meaningful difference is exactly five
+32-bit words in one 30-word table at DSP book 0x00 / page 0x0F, changed
+identically for all four amplifiers — no EQ, crossover, gain, or
+per-speaker calibration changes.
+
+The table is a two-band dynamics (DRC/limiter) parameter block; the values
+are dB stored in log2 units (× 20·log10 2). The deltas are exact: one
+band's threshold lowered 5.5 dB, the other's 0.5 dB, one band's step pair
+softened 1.5 → 1.0 dB (harmonizing the two bands), one coefficient snapped
+to 9/32. This matches TI's own published tuning recipe for the Smart Amp
+DRC (TAS2563 Tuning Guide, SLAA936: two crossover-split bands, per-band
+thresholds; "reduce the region 2 threshold by 5 dB, soften the ratio") —
+i.e. a standard final-polish pass that the Linux-shipped blob predates.
+
+Practical upshot: below the DRC thresholds the two blobs behave
+bit-identically; at high volume the Windows revision compresses bass
+earlier and in finer steps. `tas2781-win-fw` (see README) lets users apply
+their own Windows copy persistently.
+
 ## Related but separate: the SSID-collision bind bug (fixed in 7.1)
 
 On the Yoga Pro 9 16IMH9 the HDA codec subsystem ID is `17aa:38d6` but the

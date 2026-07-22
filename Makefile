@@ -18,12 +18,14 @@ systemd/tas2781-force-fwload.service: systemd/tas2781-force-fwload.service.in
 
 install: all
 	install -Dm755 bin/tas2781-force-fwload $(DESTDIR)$(BINDIR)/tas2781-force-fwload
+	install -Dm755 bin/tas2781-win-fw $(DESTDIR)$(BINDIR)/tas2781-win-fw
 	install -Dm644 systemd/tas2781-force-fwload.service $(DESTDIR)$(UNITDIR)/tas2781-force-fwload.service
 	install -Dm644 udev/90-tas2781-no-runtime-pm.rules $(DESTDIR)$(UDEVRULEDIR)/90-tas2781-no-runtime-pm.rules
 	install -Dm644 modprobe.d/tas2781-force-fwload.conf $(DESTDIR)$(MODPROBEDIR)/tas2781-force-fwload.conf
 
 uninstall:
 	rm -f $(DESTDIR)$(BINDIR)/tas2781-force-fwload
+	rm -f $(DESTDIR)$(BINDIR)/tas2781-win-fw
 	rm -f $(DESTDIR)$(UNITDIR)/tas2781-force-fwload.service
 	rm -f $(DESTDIR)$(UDEVRULEDIR)/90-tas2781-no-runtime-pm.rules
 	rm -f $(DESTDIR)$(MODPROBEDIR)/tas2781-force-fwload.conf

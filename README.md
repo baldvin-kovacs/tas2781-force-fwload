@@ -170,6 +170,47 @@ See
 [`extras/modprobe.d/tas2781-hda-model-quirk.conf.example`](extras/modprobe.d/tas2781-hda-model-quirk.conf.example)
 for the one-line `hda_model=` fix and how to find your machine's codec SSID.
 
+## Optional: use your Windows driver's firmware tuning
+
+While root-causing this bug we compared the Linux firmware
+(`TAS2XXX38D6.bin` from linux-firmware) byte-by-byte with the one the
+Windows driver ships on the same machine. Finding (details in
+[docs/TECHNICAL.md](docs/TECHNICAL.md)): the Windows copy is a slightly
+**newer revision of the same tuning** — identical EQ/routing/calibration,
+with only a handful of dynamics-processor (DRC/limiter) parameters changed
+to engage earlier and more gently. Below those thresholds the two are
+bit-identical in effect; at high volume the Windows tuning limits bass more
+smoothly. Some listeners prefer it.
+
+The blobs are proprietary (TI/vendor), so this repo does not and cannot
+ship them. Instead, `tas2781-win-fw` copies the firmware out of **your own
+Windows installation** and installs it as a persistent override:
+
+```
+# Windows partition mounted read-only, e.g. at /mnt/win:
+sudo tas2781-win-fw install /mnt/win
+
+# or point directly at a directory or extracted .bin file:
+sudo tas2781-win-fw install /path/to/TAS2XXX38D6.bin
+
+sudo reboot   # the swap takes effect at the next full DSP staging
+```
+
+The tool finds the right blob by name in the Windows `DriverStore`
+(searching the whole tree as fallback), validates its header, backs up the
+stock file, and — on Arch — writes a pacman hook so the override is
+**automatically re-applied when `pacman -Syu` updates linux-firmware**. On
+other distros the override is plain files; rerun `sudo tas2781-win-fw
+reapply` after a firmware package update.
+
+```
+tas2781-win-fw status        # which firmware is live, hook state
+sudo tas2781-win-fw revert   # restore stock, remove hook and backups
+```
+
+This is optional polish, not part of the fix — the force-fwload workaround
+above works identically with either firmware.
+
 ## Upstream status
 
 The underlying bug is that `tasdevice_select_tuningprm_cfg()` (in

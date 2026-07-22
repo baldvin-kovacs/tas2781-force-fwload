@@ -1,0 +1,255 @@
+#!/bin/bash
+# tas2781-win-fw — use the TAS2781 DSP firmware from your own Windows
+# installation on Linux, persistently.
+#
+# The Windows audio driver ships the same TAS2XXX*.bin DSP firmware format
+# the Linux driver loads — on some machines (e.g. Lenovo Yoga Pro 9 16IMH9)
+# as a newer tuning revision (see docs/TECHNICAL.md). The blobs are
+# proprietary, so this tool never downloads anything: it copies the firmware
+# out of a Windows partition you already own (or a file you extracted
+# yourself) and installs it over the Linux firmware file.
+#
+# On Arch Linux the override survives `pacman -Syu`: a pacman hook
+# re-applies it whenever a package transaction touches the firmware path.
+# On other distros the override is plain files; rerun `reapply` (or
+# `install`) after a firmware package update.
+#
+# Usage:
+#   tas2781-win-fw install <windows-mount-or-dir-or-file>
+#                          [--stock-from FILE] [--target FWFILE]
+#   tas2781-win-fw status
+#   tas2781-win-fw reapply
+#   tas2781-win-fw revert
+#
+# The new firmware is loaded at the next full DSP staging — reboot after
+# switching (suspend/resume also re-stages, but reboot is the clean path).
+
+set -u
+
+STATE=/var/lib/tas2781-force-fwload
+HOOKDIR=/etc/pacman.d/hooks
+HOOK=$HOOKDIR/90-tas2781-win-fw.hook
+SELF=$(readlink -f "$0")
+
+die() { echo "ERROR: $*" >&2; exit 1; }
+msg() { echo "-> $*"; }
+
+need_root() { [ "$(id -u)" = 0 ] || die "this command must run as root (use sudo)"; }
+
+fwdir() {
+    for d in /usr/lib/firmware /lib/firmware; do
+        [ -d "$d" ] && { readlink -f "$d"; return; }
+    done
+    die "no firmware directory found"
+}
+
+# The TAS2XXX DSP blobs THIS machine uses. linux-firmware ships blobs for
+# every laptop model; the driver picks by HDA codec subsystem ID
+# (TAS2XXX<SSID>.bin, sometimes with a trailing instance digit), so derive
+# the name from sysfs rather than matching all of them.
+find_targets() {
+    local fw sid s
+    fw=$(fwdir)
+    for sid in $(cat /sys/class/sound/hwC*D*/subsystem_id 2>/dev/null); do
+        s=$(printf '%04X' $(( sid & 0xffff )))
+        find "$fw" \( -name "TAS2XXX${s}.bin" -o -name "TAS2XXX${s}.bin.zst" \
+            -o -name "TAS2XXX${s}.bin.xz" -o -name "TAS2XXX${s}[0-9].bin" \
+            -o -name "TAS2XXX${s}[0-9].bin.zst" -o -name "TAS2XXX${s}[0-9].bin.xz" \) \
+            2>/dev/null
+    done | xargs -r -d'\n' readlink -f | sort -u
+}
+
+# cat a firmware file, decompressing if its suffix says so
+dcat() {
+    case "$1" in
+        *.zst) zstd -dcf "$1" ;;
+        *.xz)  xz -dc "$1" ;;
+        *)     cat "$1" ;;
+    esac
+}
+
+# compress raw firmware $1 into file $2, format implied by TARGET name $3
+compress_into() {
+    case "$3" in
+        *.zst) zstd -q -c "$1" > "$2" || return 1 ;;
+        *.xz)  xz -C crc32 -c "$1" > "$2" || return 1 ;;
+        *)     cp "$1" "$2" || return 1 ;;
+    esac
+}
+
+# validate a RAW (decompressed) TAS2XXX blob: magic "5552" + size field
+validate_raw() {
+    local f=$1
+    [ "$(head -c4 "$f")" = "5552" ] || return 1
+    local claimed actual
+    claimed=$(od -An -tu4 -j4 -N4 --endian=big "$f" | tr -d ' ')
+    actual=$(wc -c < "$f")
+    [ "$claimed" = "$actual" ]
+}
+
+raw_md5() { dcat "$1" | md5sum | cut -d' ' -f1; }
+
+# strip compression suffix -> the name the kernel requests / Windows ships
+rawname() { basename "$1" | sed 's/\.\(zst\|xz\)$//'; }
+
+write_hook() {
+    command -v pacman >/dev/null || {
+        msg "pacman not found — skipping hook (rerun '$0 reapply' after firmware package updates)"
+        return
+    }
+    mkdir -p "$HOOKDIR"
+    {
+        echo "[Trigger]"
+        echo "Operation = Install"
+        echo "Operation = Upgrade"
+        echo "Type = Path"
+        while read -r t; do
+            echo "Target = ${t#/}"
+        done < "$STATE/manifest"
+        echo
+        echo "[Action]"
+        echo "Description = Re-applying Windows TAS2781 firmware override"
+        echo "When = PostTransaction"
+        echo "Exec = $SELF reapply"
+    } > "$HOOK"
+    msg "pacman hook written: $HOOK (override now survives pacman -Syu)"
+}
+
+cmd_install() {
+    need_root
+    local src="" stock_from="" targets=""
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --stock-from) stock_from=$2; shift 2 ;;
+            --target)     targets="$targets${targets:+$'\n'}$(readlink -f "$2")"; shift 2 ;;
+            *) [ -n "$src" ] && die "unexpected argument: $1"; src=$1; shift ;;
+        esac
+    done
+    [ -n "$src" ] || die "usage: $0 install <windows-mount-or-dir-or-file> [--stock-from FILE] [--target FWFILE]"
+    [ -e "$src" ] || die "$src does not exist"
+
+    [ -n "$targets" ] || targets=$(find_targets)
+    [ -n "$targets" ] || die "could not detect this machine's TAS2XXX firmware (looked for \
+TAS2XXX<codec-SSID>.bin* under $(fwdir), SSIDs from /sys/class/sound/hwC*D*/subsystem_id). \
+Pass it explicitly: --target /usr/lib/firmware/ti/audio/tas2781/TAS2XXX<id>.bin.zst"
+    msg "target firmware: $(echo "$targets" | tr '\n' ' ')"
+
+    tmp=$(mktemp -d) || die mktemp
+    trap 'rm -rf "${tmp:-}"' EXIT
+    mkdir -p "$STATE"
+
+    local n=0
+    while read -r target; do
+        local name raw="$tmp/raw.bin" cand=""
+        name=$(rawname "$target")
+
+        # --- locate the source blob for this target ---
+        if [ -f "$src" ]; then
+            cand=$src
+            if [ "$(rawname "$src")" != "$name" ]; then
+                msg "NOTE: source $(basename "$src") does not match target name $name — using it anyway"
+            fi
+        else
+            # search a Windows tree: DriverStore first, then the whole mount
+            local ds="$src/Windows/System32/DriverStore/FileRepository"
+            local hits=""
+            [ -d "$ds" ] && hits=$(find "$ds" -iname "$name" -type f 2>/dev/null)
+            [ -n "$hits" ] || hits=$(find "$src" -iname "$name" -type f 2>/dev/null)
+            [ -n "$hits" ] || { msg "no $name found under $src — skipping this target"; continue; }
+            local distinct
+            distinct=$(echo "$hits" | xargs -d'\n' md5sum | awk '{print $1}' | sort -u | wc -l)
+            cand=$(echo "$hits" | xargs -d'\n' ls -t 2>/dev/null | head -1)
+            msg "found $(echo "$hits" | wc -l) copies of $name ($distinct distinct); using newest: $cand"
+        fi
+
+        dcat "$cand" > "$raw" || die "could not read $cand"
+        validate_raw "$raw" || die "$cand is not a valid TAS2XXX firmware blob (magic/size check failed)"
+
+        # --- stash the stock file (once), guarding against a pre-modified live file ---
+        if [ ! -e "$STATE/$(basename "$target").stock" ]; then
+            if [ -n "$stock_from" ]; then
+                dcat "$stock_from" > "$tmp/stock.bin" || die "could not read $stock_from"
+                validate_raw "$tmp/stock.bin" || die "$stock_from is not a valid TAS2XXX blob"
+                compress_into "$tmp/stock.bin" "$STATE/$(basename "$target").stock" "$target"
+                msg "stock backup taken from $stock_from"
+            elif [ "$(raw_md5 "$target")" = "$(md5sum < "$raw" | cut -d' ' -f1)" ]; then
+                msg "WARNING: the live $target is already identical to the Windows blob —"
+                msg "         cannot back it up as stock. Revert will need your firmware package"
+                msg "         reinstalled, or rerun install with --stock-from <original file>."
+            else
+                cp "$target" "$STATE/$(basename "$target").stock"
+                msg "stock backup: $STATE/$(basename "$target").stock"
+            fi
+        fi
+
+        # --- build payload + apply ---
+        compress_into "$raw" "$STATE/$(basename "$target").win" "$target" || die "compress failed"
+        install -m644 "$STATE/$(basename "$target").win" "$target" || die "could not write $target"
+        grep -qxF "$target" "$STATE/manifest" 2>/dev/null || echo "$target" >> "$STATE/manifest"
+        msg "installed Windows firmware over $target"
+        n=$((n+1))
+    done <<< "$targets"
+
+    [ "$n" -gt 0 ] || die "nothing installed"
+    write_hook
+    echo
+    echo "Done. Reboot to load the Windows firmware (every boot from now on uses it)."
+    echo "Undo at any time with: sudo $SELF revert"
+}
+
+cmd_reapply() {
+    [ -f "$STATE/manifest" ] || exit 0
+    while read -r target; do
+        local payload="$STATE/$(basename "$target").win"
+        [ -f "$payload" ] || continue
+        if ! cmp -s "$payload" "$target"; then
+            install -m644 "$payload" "$target" \
+                && echo "tas2781-win-fw: re-applied Windows firmware to $target" \
+                || echo "tas2781-win-fw: FAILED to re-apply $target" >&2
+        fi
+    done < "$STATE/manifest"
+    exit 0
+}
+
+cmd_revert() {
+    need_root
+    [ -f "$STATE/manifest" ] || die "no override is installed"
+    while read -r target; do
+        local stock="$STATE/$(basename "$target").stock"
+        if [ -f "$stock" ]; then
+            install -m644 "$stock" "$target"
+            msg "restored stock firmware: $target"
+        else
+            local owner
+            owner=$(pacman -Qoq "$target" 2>/dev/null || true)
+            msg "no stock backup for $target — reinstall it with: pacman -S ${owner:-linux-firmware}"
+        fi
+    done < "$STATE/manifest"
+    rm -f "$HOOK"
+    rm -rf "$STATE"
+    echo "Override removed. Reboot to load the stock firmware."
+}
+
+cmd_status() {
+    if [ ! -f "$STATE/manifest" ]; then
+        echo "no Windows firmware override installed"
+        find_targets | sed 's/^/  this machine'"'"'s firmware: /'
+        exit 0
+    fi
+    while read -r target; do
+        local st="MODIFIED/unknown"
+        cmp -s "$STATE/$(basename "$target").win" "$target" 2>/dev/null && st="OVERRIDE ACTIVE (Windows firmware)"
+        cmp -s "$STATE/$(basename "$target").stock" "$target" 2>/dev/null && st="stock (override pending — run reapply)"
+        echo "$target: $st"
+    done < "$STATE/manifest"
+    [ -f "$HOOK" ] && echo "pacman hook: present ($HOOK)" \
+                   || echo "pacman hook: NOT present"
+}
+
+case "${1:-}" in
+    install) shift; cmd_install "$@" ;;
+    reapply) cmd_reapply ;;
+    revert)  cmd_revert ;;
+    status)  cmd_status ;;
+    *) sed -n '2,25p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
+esac
