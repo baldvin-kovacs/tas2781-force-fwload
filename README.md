@@ -199,7 +199,11 @@ sudo reboot   # the swap takes effect at the next full DSP staging
 The tool finds the right blob by name in the Windows `DriverStore`
 (searching the whole tree as fallback), validates its header, backs up the
 stock file, and — on Arch — writes a pacman hook so the override is
-**automatically re-applied when `pacman -Syu` updates linux-firmware**. On
+**automatically re-applied when `pacman -Syu` updates linux-firmware**. The
+persistence machinery is fully self-contained under
+`/var/lib/tas2781-force-fwload/` (payloads, stock backup, and a generated
+re-apply helper the hook executes) — it does not depend on where you ran
+the tool from, so installing straight from a git checkout is fine. On
 other distros the override is plain files; rerun `sudo tas2781-win-fw
 reapply` after a firmware package update.
 

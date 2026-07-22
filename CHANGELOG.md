@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.1 — 2026-07-22
+
+- tas2781-win-fw: the pacman hook no longer executes the tool from wherever
+  it happened to be run (a git checkout the user didn't know they had to
+  keep). It now runs a generated, self-contained `reapply.sh` inside
+  `/var/lib/tas2781-force-fwload/` — the override keeps re-applying itself
+  even if the checkout, or the package, is later removed. Users with a
+  0.2.0-era hook: rerun `install` once to regenerate it.
+
 ## 0.2.0 — 2026-07-22
 
 - New optional tool `tas2781-win-fw`: install the TAS2781 DSP firmware from

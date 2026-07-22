@@ -17,11 +17,10 @@ post_remove() {
   echo '    at next boot; expect the missing-bass bug to return until the kernel'
   echo '    fix lands.'
   if [ -d /var/lib/tas2781-force-fwload ]; then
-    echo '==> WARNING: a tas2781-win-fw firmware override is still installed'
-    echo '    (/var/lib/tas2781-force-fwload + pacman hook), but the tool that'
-    echo '    maintains it was just removed. Either reinstall the package, or'
-    echo '    restore the stock firmware manually and delete:'
-    echo '      /etc/pacman.d/hooks/90-tas2781-win-fw.hook'
-    echo '      /var/lib/tas2781-force-fwload/'
+    echo '==> NOTE: a tas2781-win-fw firmware override is still active and will'
+    echo '    keep re-applying itself (its hook is self-contained under'
+    echo '    /var/lib/tas2781-force-fwload). To undo it without the tool:'
+    echo '      install -m644 /var/lib/tas2781-force-fwload/*.stock <firmware file>'
+    echo '      rm -rf /etc/pacman.d/hooks/90-tas2781-win-fw.hook /var/lib/tas2781-force-fwload'
   fi
 }
